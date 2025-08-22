@@ -7,6 +7,7 @@ import './MainPage.css';
 const MainPage: React.FC = () => {
   const { logout, userInfo } = useAuth();
   const [senderEmail, setSenderEmail] = useState('');
+  const [senderName, setSenderName] = useState('');
   const [senderPassword, setSenderPassword] = useState('');
   const [recipientsText, setRecipientsText] = useState('');
   const [subject, setSubject] = useState('');
@@ -90,6 +91,7 @@ const MainPage: React.FC = () => {
       // Send emails using EmailService
       const emailData = {
         senderEmail: senderEmail.trim(),
+        senderName: senderName.trim(),
         appPassword: senderPassword.trim(),
         recipients: validRecipients,
         subject: subject.trim(),
@@ -117,6 +119,7 @@ const MainPage: React.FC = () => {
   };
 
   const handleResetForm = () => {
+    setSenderName('');
     setRecipientsText('');
     setSubject('');
     setTemplate('');
@@ -230,6 +233,17 @@ const MainPage: React.FC = () => {
                     />
                   </div>
                   <div className="form-group">
+                    <label htmlFor="senderName">Sender Name *</label>
+                    <input
+                      type="text"
+                      id="senderName"
+                      value={senderName}
+                      onChange={(e) => setSenderName(e.target.value)}
+                      placeholder="Your Full Name"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
                     <label htmlFor="senderPassword">App Password *</label>
                     <input
                       type="password"
@@ -296,6 +310,9 @@ const MainPage: React.FC = () => {
                       rows={18}
                       required
                     />
+                    <div className="help-text">
+                      💡 Line breaks will be automatically converted to HTML &lt;br&gt; tags for proper email formatting
+                    </div>
                   </div>
                 </div>
               </div>
@@ -320,7 +337,7 @@ const MainPage: React.FC = () => {
                       <li>Generate an App Password for "Mail"</li>
                       <li>Use the generated 16-character password (not your regular Gmail password)</li>
                     </ol>
-                    <p><strong>Email Service:</strong> {EmailService.getEmailServiceInfo()}</p>
+                    <p><strong>Sender Name:</strong> The sender name will appear as the "From" display name in recipients' inboxes.</p>
                     <p><strong>Privacy:</strong> All recipients will be added to BCC to protect their privacy.</p>
                   </div>
                 )}

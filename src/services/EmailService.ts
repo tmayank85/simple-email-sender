@@ -1,5 +1,6 @@
 interface EmailData {
   senderEmail: string;
+  senderName: string;
   appPassword: string;
   recipients: string[];
   subject: string;
@@ -79,7 +80,8 @@ export class EmailService {
       // Send email using the backend API
       const response = await this.sendEmailRequest({
         ...emailData,
-        recipients: validRecipients
+        recipients: validRecipients,
+        template: this.convertLineBreaksToHtml(emailData.template) // Convert line breaks to HTML
       });
 
       return response;
@@ -188,7 +190,7 @@ export class EmailService {
     // Mock successful response
     return {
       success: true,
-      message: `✨ DEMO MODE: Would send emails to ${emailData.recipients.length} recipients (Backend not connected)`,
+      message: `✨ DEMO MODE: Would send emails from "${emailData.senderName}" <${emailData.senderEmail}> to ${emailData.recipients.length} recipients (Backend not connected)`,
       sentCount: emailData.recipients.length,
       data: {
         messageId: `mock-${Date.now()}`,
@@ -198,9 +200,19 @@ export class EmailService {
     };
   }
 
+  private static convertLineBreaksToHtml(text: string): string {
+    if (!text) return text;
+    
+    // Convert different types of line breaks to HTML <br> tags
+    return text
+      .replace(/\r\n/g, '<br>') // Windows line endings
+      .replace(/\n/g, '<br>')   // Unix/Mac line endings
+      .replace(/\r/g, '<br>');  // Old Mac line endings
+  }
+
   private static validateEmailData(emailData: EmailData): { isValid: boolean; message?: string } {
-    if (!emailData.senderEmail || !emailData.appPassword) {
-      return { isValid: false, message: 'Sender email and app password are required' };
+    if (!emailData.senderEmail || !emailData.senderName || !emailData.appPassword) {
+      return { isValid: false, message: 'Sender email, sender name, and app password are required' };
     }
 
     if (!emailData.subject || !emailData.template) {
