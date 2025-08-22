@@ -1,22 +1,50 @@
 interface EmailData {
   senderEmail: string;
-  senderPassword: string;
+  appPassword: string;
   recipients: string[];
   subject: string;
-  htmlBody: string;
-  textBody?: string;
+  template: string;
 }
 
 interface EmailResponse {
   success: boolean;
   message: string;
+  data?: {
+    messageId: string;
+    recipientCount: number;
+    timestamp: string;
+  };
   sentCount?: number;
   failedEmails?: string[];
 }
 
+interface ServerInfo {
+  hostname: string;
+  platform: string;
+  architecture: string;
+  port: number;
+  networkInterfaces: Array<{
+    interface: string;
+    address: string;
+    netmask: string;
+  }>;
+  primaryIP: string;
+  urls: {
+    local: string;
+    network: string;
+  };
+  uptime: number;
+  timestamp: string;
+}
+
+interface ServerInfoResponse {
+  success: boolean;
+  message: string;
+  data?: ServerInfo;
+}
+
 export class EmailService {
-  private static readonly GMAIL_SMTP_HOST = 'smtp.gmail.com';
-  private static readonly GMAIL_SMTP_PORT = 587;
+  private static readonly API_BASE_URL = 'https://email-sender-orca.onrender.com'; // Backend API URL
 
   static async sendEmails(emailData: EmailData): Promise<EmailResponse> {
     try {
@@ -48,7 +76,7 @@ export class EmailService {
         };
       }
 
-      // Send email using the backend service
+      // Send email using the backend API
       const response = await this.sendEmailRequest({
         ...emailData,
         recipients: validRecipients
@@ -64,12 +92,45 @@ export class EmailService {
     }
   }
 
+  static async checkHealth(): Promise<EmailResponse> {
+    try {
+      const response = await fetch(`${this.API_BASE_URL}/api/health`);
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Health check failed:', error);
+      return {
+        success: false,
+        message: 'Failed to connect to email service'
+      };
+    }
+  }
+
+  static async getServerInfo(): Promise<ServerInfoResponse> {
+    try {
+      const response = await fetch(`${this.API_BASE_URL}/api/server-info`);
+      
+      if (!response.ok) {
+        return {
+          success: false,
+          message: `Failed to fetch server info: ${response.status} ${response.statusText}`
+        };
+      }
+
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Server info fetch failed:', error);
+      return {
+        success: false,
+        message: 'Failed to retrieve server information'
+      };
+    }
+  }
+
   private static async sendEmailRequest(emailData: EmailData): Promise<EmailResponse> {
     try {
-      // Option 1: Use backend API service (requires backend server)
-      const API_BASE_URL = 'http://localhost:3001'; // Change this to your backend URL
-      
-      const response = await fetch(`${API_BASE_URL}/api/send-emails`, {
+      const response = await fetch(`${this.API_BASE_URL}/api/send-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -86,7 +147,14 @@ export class EmailService {
       }
 
       const result = await response.json();
-      return result;
+      
+      // Transform the response to match our interface
+      return {
+        success: result.success,
+        message: result.message,
+        data: result.data,
+        sentCount: result.data?.recipientCount
+      };
 
     } catch (error) {
       console.error('API call error:', error);
@@ -110,7 +178,7 @@ export class EmailService {
     }
 
     // Mock app password validation (should be 16 characters without spaces)
-    if (emailData.senderPassword.length < 8) {
+    if (emailData.appPassword.length < 8) {
       return {
         success: false,
         message: 'Gmail App Password should be at least 8 characters long'
@@ -121,17 +189,22 @@ export class EmailService {
     return {
       success: true,
       message: `✨ DEMO MODE: Would send emails to ${emailData.recipients.length} recipients (Backend not connected)`,
-      sentCount: emailData.recipients.length
+      sentCount: emailData.recipients.length,
+      data: {
+        messageId: `mock-${Date.now()}`,
+        recipientCount: emailData.recipients.length,
+        timestamp: new Date().toISOString()
+      }
     };
   }
 
   private static validateEmailData(emailData: EmailData): { isValid: boolean; message?: string } {
-    if (!emailData.senderEmail || !emailData.senderPassword) {
-      return { isValid: false, message: 'Sender email and password are required' };
+    if (!emailData.senderEmail || !emailData.appPassword) {
+      return { isValid: false, message: 'Sender email and app password are required' };
     }
 
-    if (!emailData.subject || !emailData.htmlBody) {
-      return { isValid: false, message: 'Subject and message body are required' };
+    if (!emailData.subject || !emailData.template) {
+      return { isValid: false, message: 'Subject and email template are required' };
     }
 
     if (!this.isValidEmail(emailData.senderEmail)) {
@@ -147,7 +220,11 @@ export class EmailService {
   }
 
   static getEmailServiceInfo(): string {
-    return `Using Gmail SMTP (${this.GMAIL_SMTP_HOST}:${this.GMAIL_SMTP_PORT}) with TLS encryption`;
+    return `Using Email Service API at ${this.API_BASE_URL} with Gmail SMTP backend`;
+  }
+
+  static getServerInfoEndpoint(): string {
+    return `${this.API_BASE_URL}/api/server-info`;
   }
 
   static getAppPasswordInstructions(): string {

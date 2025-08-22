@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { EmailService } from '../services/EmailService';
 import './MainPage.css';
@@ -13,13 +13,47 @@ const MainPage: React.FC = () => {
   const [isLoading, setIsLoading] = useState(false);
   const [lastResult, setLastResult] = useState<string>('');
   const [showInstructions, setShowInstructions] = useState(false);
+  const [connectionStatus, setConnectionStatus] = useState<string>('');
+  const [headerServerInfo, setHeaderServerInfo] = useState<string>('');
 
-  // Get current server details
-  const serverInfo = {
-    host: window.location.hostname || 'localhost',
-    port: window.location.port || '5173',
-    protocol: window.location.protocol || 'http:'
+  // Test API connection
+  const testConnection = async () => {
+    try {
+      setConnectionStatus('Testing connection...');
+      const result = await EmailService.checkHealth();
+      if (result.success) {
+        setConnectionStatus('✅ API connected successfully');
+      } else {
+        setConnectionStatus(`❌ API connection failed: ${result.message}`);
+      }
+    } catch {
+      setConnectionStatus('❌ Failed to connect to email service');
+    }
   };
+
+  // Get simplified server info for header
+  const loadHeaderServerInfo = async () => {
+    try {
+      const result = await EmailService.getServerInfo();
+      if (result.success && result.data) {
+        const serverName = result.data.hostname || 'Unknown Server';
+        const serverIP = result.data.primaryIP || 'No IP';
+        const platform = result.data.platform || 'Unknown';
+        const uptime = result.data.uptime ? Math.floor(result.data.uptime / 60) : 0; // Convert to minutes
+        
+        setHeaderServerInfo(`${serverName}|${serverIP}|${platform}|${uptime}`);
+      } else {
+        setHeaderServerInfo('Unavailable|No IP|Unknown|0');
+      }
+    } catch {
+      setHeaderServerInfo('Unavailable|No IP|Unknown|0');
+    }
+  };
+
+  // Load server info on component mount
+  useEffect(() => {
+    loadHeaderServerInfo();
+  }, []);
 
   const handleLogout = () => {
     logout();
@@ -55,11 +89,10 @@ const MainPage: React.FC = () => {
       // Send emails using EmailService
       const emailData = {
         senderEmail: senderEmail.trim(),
-        senderPassword: senderPassword.trim(),
+        appPassword: senderPassword.trim(),
         recipients: validRecipients,
         subject: subject.trim(),
-        htmlBody: template.replace(/\n/g, '<br>'), // Convert line breaks to HTML
-        textBody: template.trim()
+        template: template.trim() // Send as plain text, HTML processing happens on backend
       };
 
       const result = await EmailService.sendEmails(emailData);
@@ -86,12 +119,57 @@ const MainPage: React.FC = () => {
       <header className="main-header">
         <div className="header-content">
           <div className="header-left">
-            <h1>Simple Email Sender</h1>
-            <div className="server-info">
-              <span className="server-label">Server:</span>
-              <span className="server-details">
-                {serverInfo.protocol}//{serverInfo.host}:{serverInfo.port}
-              </span>
+            <div className="title-section">
+              <h1>Simple Email Sender</h1>
+              {headerServerInfo && headerServerInfo !== 'Unavailable|No IP|Unknown|0' && (
+                <div className="backend-server-info">
+                  <span className="server-label">Backend Server:</span>
+                  <div className="server-details-group">
+                    <span 
+                      className="server-detail-item"
+                      title="Server Hostname"
+                    >
+                      🖥️ {headerServerInfo.split('|')[0]}
+                    </span>
+                    <span 
+                      className="server-detail-item"
+                      title="Server IP Address"
+                    >
+                      🌐 {headerServerInfo.split('|')[1]}
+                    </span>
+                    <span 
+                      className="server-detail-item"
+                      title={`Server Platform: ${headerServerInfo.split('|')[2]} | Full Backend Details`}
+                    >
+                      ⏱️ {headerServerInfo.split('|')[3]}min uptime
+                    </span>
+                  </div>
+                </div>
+              )}
+            </div>
+            <div className="api-status">
+              <button 
+                type="button" 
+                onClick={testConnection} 
+                className="test-connection-btn"
+                style={{ 
+                  fontSize: '0.8rem', 
+                  padding: '4px 8px', 
+                  marginLeft: '10px',
+                  backgroundColor: '#007bff',
+                  color: 'white',
+                  border: 'none',
+                  borderRadius: '4px',
+                  cursor: 'pointer'
+                }}
+              >
+                Test API
+              </button>
+              {connectionStatus && (
+                <div style={{ fontSize: '0.8rem', marginTop: '4px', color: connectionStatus.includes('✅') ? '#28a745' : '#dc3545' }}>
+                  {connectionStatus}
+                </div>
+              )}
             </div>
           </div>
           <button onClick={handleLogout} className="logout-button">
@@ -102,92 +180,98 @@ const MainPage: React.FC = () => {
 
       <main className="main-content">
         <div className="email-form-container">
-          <form onSubmit={handleSendEmails} className="email-form">
-            {/* Sender Details Section */}
-            <div className="form-section">
-              <h2>Sender Details</h2>
-              <div className="form-row">
-                <div className="form-group">
-                  <label htmlFor="senderEmail">Sender Email *</label>
-                  <input
-                    type="email"
-                    id="senderEmail"
-                    value={senderEmail}
-                    onChange={(e) => setSenderEmail(e.target.value)}
-                    placeholder="your-email@gmail.com"
-                    required
-                  />
+          <form onSubmit={handleSendEmails} className="email-form" id="email-form">
+            <div className="form-columns">
+              {/* Left Column - Sender & Recipients */}
+              <div className="left-column">
+                {/* Sender Details Section */}
+                <div className="form-section">
+                  <h2>Sender Details</h2>
+                  <div className="form-group">
+                    <label htmlFor="senderEmail">Sender Email *</label>
+                    <input
+                      type="email"
+                      id="senderEmail"
+                      value={senderEmail}
+                      onChange={(e) => setSenderEmail(e.target.value)}
+                      placeholder="your-email@gmail.com"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="senderPassword">App Password *</label>
+                    <input
+                      type="password"
+                      id="senderPassword"
+                      value={senderPassword}
+                      onChange={(e) => setSenderPassword(e.target.value)}
+                      placeholder="Your Gmail app password"
+                      required
+                    />
+                  </div>
                 </div>
-                <div className="form-group">
-                  <label htmlFor="senderPassword">App Password *</label>
-                  <input
-                    type="password"
-                    id="senderPassword"
-                    value={senderPassword}
-                    onChange={(e) => setSenderPassword(e.target.value)}
-                    placeholder="Your email app password"
-                    required
-                  />
-                </div>
-              </div>
-            </div>
 
-            {/* Recipients Section */}
-            <div className="form-section">
-              <div className="section-header">
-                <h2>Recipients (Max 25)</h2>
-                <div className="recipient-counter">
-                  {getRecipientCount()}/25 recipients
+                {/* Recipients Section */}
+                <div className="form-section">
+                  <div className="section-header">
+                    <h2>Recipients</h2>
+                    <div className="recipient-counter">
+                      {getRecipientCount()}/25 recipients
+                    </div>
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="recipients">
+                      Recipient Emails (one per line) *
+                    </label>
+                    <textarea
+                      id="recipients"
+                      value={recipientsText}
+                      onChange={(e) => setRecipientsText(e.target.value)}
+                      placeholder="Enter recipient emails, one per line:&#10;example1@email.com&#10;example2@email.com&#10;example3@email.com"
+                      rows={12}
+                      className="recipients-textarea"
+                      required
+                    />
+                    <div className="help-text">
+                      💡 Tip: Copy and paste multiple email addresses, each on a new line
+                    </div>
+                  </div>
                 </div>
               </div>
-              <div className="form-group">
-                <label htmlFor="recipients">
-                  Recipient Emails (one per line) *
-                </label>
-                <textarea
-                  id="recipients"
-                  value={recipientsText}
-                  onChange={(e) => setRecipientsText(e.target.value)}
-                  placeholder="Enter recipient emails, one per line:&#10;example1@email.com&#10;example2@email.com&#10;example3@email.com"
-                  rows={8}
-                  className="recipients-textarea"
-                  required
-                />
-                <div className="help-text">
-                  💡 Tip: Copy and paste multiple email addresses, each on a new line
-                </div>
-              </div>
-            </div>
 
-            {/* Email Template Section */}
-            <div className="form-section">
-              <h2>Email Template</h2>
-              <div className="form-group">
-                <label htmlFor="subject">Subject *</label>
-                <input
-                  type="text"
-                  id="subject"
-                  value={subject}
-                  onChange={(e) => setSubject(e.target.value)}
-                  placeholder="Enter email subject"
-                  required
-                />
-              </div>
-              <div className="form-group">
-                <label htmlFor="template">Email Body *</label>
-                <textarea
-                  id="template"
-                  value={template}
-                  onChange={(e) => setTemplate(e.target.value)}
-                  placeholder="Enter your email template here..."
-                  rows={8}
-                  required
-                />
+              {/* Right Column - Subject & Template */}
+              <div className="right-column">
+                {/* Email Template Section */}
+                <div className="form-section">
+                  <h2>Email Content</h2>
+                  <div className="form-group">
+                    <label htmlFor="subject">Subject *</label>
+                    <input
+                      type="text"
+                      id="subject"
+                      value={subject}
+                      onChange={(e) => setSubject(e.target.value)}
+                      placeholder="Enter email subject"
+                      required
+                    />
+                  </div>
+                  <div className="form-group">
+                    <label htmlFor="template">Email Body *</label>
+                    <textarea
+                      id="template"
+                      value={template}
+                      onChange={(e) => setTemplate(e.target.value)}
+                      placeholder="Enter your email template here...&#10;&#10;You can use HTML tags like:&#10;&lt;h1&gt;Header&lt;/h1&gt;&#10;&lt;p&gt;Paragraph&lt;/p&gt;&#10;&lt;a href=&quot;url&quot;&gt;Link&lt;/a&gt;"
+                      rows={18}
+                      required
+                    />
+                  </div>
+                </div>
               </div>
             </div>
 
             {/* Gmail Instructions */}
-            <div className="form-section">
+            <div className="form-section instructions-section">
               <div className="help-section">
                 <button
                   type="button"
@@ -213,23 +297,26 @@ const MainPage: React.FC = () => {
             </div>
 
             {/* Result Display */}
-            {lastResult && (
-              <div className={`result-message ${lastResult.startsWith('✅') ? 'success' : 'error'}`}>
-                {lastResult}
-              </div>
-            )}
-
-            {/* Send Button */}
-            <div className="form-actions">
-              <button
-                type="submit"
-                className="send-button"
-                disabled={isLoading}
-              >
-                {isLoading ? 'Sending...' : 'Send Emails'}
-              </button>
+            <div className="result-section">
+              {lastResult && (
+                <div className={`result-message ${lastResult.startsWith('✅') ? 'success' : 'error'}`}>
+                  {lastResult}
+                </div>
+              )}
             </div>
           </form>
+
+          {/* Fixed Send Button */}
+          <div className="send-button-fixed">
+            <button
+              type="submit"
+              form="email-form"
+              className="send-button"
+              disabled={isLoading}
+            >
+              {isLoading ? 'Sending...' : 'Send Emails'}
+            </button>
+          </div>
         </div>
       </main>
     </div>
