@@ -1,9 +1,11 @@
-import React, { createContext, useContext, useState } from 'react';
+import React, { createContext, useContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
+import { AuthService } from '../services/AuthService';
 
 interface AuthContextType {
   isAuthenticated: boolean;
-  login: (email: string, password: string) => boolean;
+  userInfo: { email: string; name: string; loginTime: string } | null;
+  login: (email: string, password: string) => { success: boolean; message: string };
   logout: () => void;
 }
 
@@ -22,27 +24,57 @@ interface AuthProviderProps {
 }
 
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
-  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(
-    () => localStorage.getItem('isLoggedIn') === 'true'
-  );
+  const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
+  const [userInfo, setUserInfo] = useState<{ email: string; name: string; loginTime: string } | null>(null);
 
-  const login = (email: string, password: string): boolean => {
-    // Simple validation - you can customize this logic
-    if (email && password) {
+  // Check authentication state on component mount
+  useEffect(() => {
+    const authState = AuthService.getAuthState();
+    if (authState) {
       setIsAuthenticated(true);
-      localStorage.setItem('isLoggedIn', 'true');
-      return true;
+      setUserInfo(authState);
     }
-    return false;
+  }, []);
+
+  const login = (email: string, password: string): { success: boolean; message: string } => {
+    // Validate input
+    if (!email.trim()) {
+      return { success: false, message: 'Email is required' };
+    }
+
+    if (!password.trim()) {
+      return { success: false, message: 'Password is required' };
+    }
+
+    if (!AuthService.isValidEmail(email)) {
+      return { success: false, message: 'Please enter a valid email address' };
+    }
+
+    // Authenticate with hardcoded credentials
+    if (AuthService.authenticate(email, password)) {
+      setIsAuthenticated(true);
+      AuthService.saveAuthState(email);
+      
+      const authState = AuthService.getAuthState();
+      if (authState) {
+        setUserInfo(authState);
+      }
+
+      return { success: true, message: 'Login successful!' };
+    } else {
+      return { success: false, message: 'Invalid email or password' };
+    }
   };
 
   const logout = () => {
     setIsAuthenticated(false);
-    localStorage.removeItem('isLoggedIn');
+    setUserInfo(null);
+    AuthService.clearAuthState();
   };
 
   const value: AuthContextType = {
     isAuthenticated,
+    userInfo,
     login,
     logout,
   };

@@ -1,10 +1,11 @@
 import React, { useState, useEffect } from 'react';
 import { useAuth } from '../contexts/AuthContext';
 import { EmailService } from '../services/EmailService';
+import { AuthService } from '../services/AuthService';
 import './MainPage.css';
 
 const MainPage: React.FC = () => {
-  const { logout } = useAuth();
+  const { logout, userInfo } = useAuth();
   const [senderEmail, setSenderEmail] = useState('');
   const [senderPassword, setSenderPassword] = useState('');
   const [recipientsText, setRecipientsText] = useState('');
@@ -98,11 +99,12 @@ const MainPage: React.FC = () => {
       const result = await EmailService.sendEmails(emailData);
 
       if (result.success) {
-        setLastResult(`✅ ${result.message}`);
-        // Reset form on success
-        setRecipientsText('');
-        setSubject('');
-        setTemplate('');
+        const successMessage = `✅ ${result.message}`;
+        setLastResult(successMessage);
+        // Show browser alert for immediate notification
+        alert(`Success! ${result.message}`);
+        // Scroll to top to show the success message
+        window.scrollTo({ top: 0, behavior: 'smooth' });
       } else {
         setLastResult(`❌ ${result.message}`);
       }
@@ -112,6 +114,13 @@ const MainPage: React.FC = () => {
     } finally {
       setIsLoading(false);
     }
+  };
+
+  const handleResetForm = () => {
+    setRecipientsText('');
+    setSubject('');
+    setTemplate('');
+    setLastResult('');
   };
 
   return (
@@ -172,15 +181,37 @@ const MainPage: React.FC = () => {
               )}
             </div>
           </div>
-          <button onClick={handleLogout} className="logout-button">
-            Logout
-          </button>
+          <div className="user-section">
+            {userInfo && (
+              <div className="user-info">
+                <div className="user-details">
+                  <span className="user-name">{userInfo.name}</span>
+                  <span className="user-email">{userInfo.email}</span>
+                  <span className="session-time" title={`Logged in: ${new Date(userInfo.loginTime).toLocaleString()}`}>
+                    {AuthService.getSessionDuration()}
+                  </span>
+                </div>
+              </div>
+            )}
+            <button onClick={handleLogout} className="logout-button">
+              Logout
+            </button>
+          </div>
         </div>
       </header>
 
       <main className="main-content">
         <div className="email-form-container">
           <form onSubmit={handleSendEmails} className="email-form" id="email-form">
+            {/* Result Display - Moved to top for better visibility */}
+            {lastResult && (
+              <div className="result-section-top">
+                <div className={`result-message ${lastResult.startsWith('✅') ? 'success' : 'error'}`}>
+                  {lastResult}
+                </div>
+              </div>
+            )}
+            
             <div className="form-columns">
               {/* Left Column - Sender & Recipients */}
               <div className="left-column">
@@ -295,27 +326,28 @@ const MainPage: React.FC = () => {
                 )}
               </div>
             </div>
-
-            {/* Result Display */}
-            <div className="result-section">
-              {lastResult && (
-                <div className={`result-message ${lastResult.startsWith('✅') ? 'success' : 'error'}`}>
-                  {lastResult}
-                </div>
-              )}
-            </div>
           </form>
 
-          {/* Fixed Send Button */}
+          {/* Fixed Action Buttons */}
           <div className="send-button-fixed">
-            <button
-              type="submit"
-              form="email-form"
-              className="send-button"
-              disabled={isLoading}
-            >
-              {isLoading ? 'Sending...' : 'Send Emails'}
-            </button>
+            <div className="action-buttons">
+              <button
+                type="button"
+                onClick={handleResetForm}
+                className="reset-button"
+                disabled={isLoading}
+              >
+                Reset Form
+              </button>
+              <button
+                type="submit"
+                form="email-form"
+                className="send-button"
+                disabled={isLoading}
+              >
+                {isLoading ? 'Sending...' : 'Send Emails'}
+              </button>
+            </div>
           </div>
         </div>
       </main>

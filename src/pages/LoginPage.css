@@ -21,8 +21,15 @@
 
 .login-card h1 {
   text-align: center;
-  margin-bottom: 2rem;
+  margin-bottom: 1rem;
   color: #333;
+}
+
+.login-subtitle {
+  text-align: center;
+  color: #666;
+  margin-bottom: 2rem;
+  font-size: 0.9rem;
 }
 
 .login-form {
@@ -56,6 +63,11 @@
   box-shadow: 0 0 0 2px rgba(100, 108, 255, 0.2);
 }
 
+.form-group input:disabled {
+  background-color: #f5f5f5;
+  cursor: not-allowed;
+}
+
 .error-message {
   color: #e74c3c;
   font-size: 0.875rem;
@@ -77,10 +89,68 @@
   transition: background-color 0.3s;
 }
 
-.login-button:hover {
+.login-button:hover:not(:disabled) {
   background-color: #5a67d8;
 }
 
-.login-button:active {
+.login-button:active:not(:disabled) {
   background-color: #4c51bf;
+}
+
+.login-button:disabled {
+  background-color: #6c757d;
+  cursor: not-allowed;
+}
+
+/* Demo Credentials Section */
+.demo-section {
+  margin-top: 2rem;
+  padding-top: 1.5rem;
+  border-top: 1px solid #eee;
+}
+
+.demo-toggle-btn {
+  background: none;
+  border: none;
+  color: #646cff;
+  cursor: pointer;
+  font-size: 0.9rem;
+  padding: 0.5rem 0;
+  width: 100%;
+  text-align: left;
+  transition: color 0.3s;
+}
+
+.demo-toggle-btn:hover {
+  color: #5a67d8;
+}
+
+.demo-credentials {
+  margin-top: 1rem;
+  padding: 1rem;
+  background-color: #f8f9fa;
+  border-radius: 4px;
+  border: 1px solid #dee2e6;
+}
+
+.demo-credentials p {
+  margin: 0.5rem 0;
+  font-size: 0.9rem;
+  color: #555;
+}
+
+.fill-demo-btn {
+  background-color: #28a745;
+  color: white;
+  border: none;
+  padding: 0.5rem 1rem;
+  border-radius: 4px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  margin-top: 0.5rem;
+  transition: background-color 0.3s;
+}
+
+.fill-demo-btn:hover {
+  background-color: #218838;
 }
