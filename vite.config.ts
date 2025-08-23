@@ -7,7 +7,7 @@ export default defineConfig({
   server: {
     proxy: {
       '/api': {
-        target: 'https://simple-email-sender-mediator.vercel.app/',
+        target: 'https://simple-email-sender-mediator.vercel.app',
         changeOrigin: true,
         secure: false,
       },
