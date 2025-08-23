@@ -4,6 +4,8 @@ import { EmailService } from '../services/EmailService';
 import { AuthService } from '../services/AuthService';
 import './MainPage.css';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+
 const MainPage: React.FC = () => {
   const { logout, userInfo } = useAuth();
   const [senderEmail, setSenderEmail] = useState('');
@@ -29,7 +31,7 @@ const MainPage: React.FC = () => {
         return;
       }
 
-      const response = await fetch('/api/health/comprehensive', {
+      const response = await fetch(`${BACKEND_URL}/api/health/comprehensive`, {
         method: 'GET',
         headers: {
           'Authorization': `Bearer ${token}`,

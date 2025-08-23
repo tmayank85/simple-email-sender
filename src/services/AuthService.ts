@@ -23,6 +23,7 @@ export interface LoginResponse {
 export class AuthService {
   private static readonly STORAGE_KEY = 'emailSender_auth';
   private static readonly TOKEN_KEY = 'emailSender_token';
+  private static readonly BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
   /**
    * Authenticate user via API
@@ -32,7 +33,7 @@ export class AuthService {
     const trimmedPassword = password.trim();
 
     try {
-      const response = await fetch('/api/auth/login', {
+      const response = await fetch(`${this.BACKEND_URL}/api/auth/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -142,7 +143,7 @@ export class AuthService {
         return { success: false, message: 'No authentication token found' };
       }
 
-      const response = await fetch('/api/user/profile', {
+      const response = await fetch(`${this.BACKEND_URL}/api/user/profile`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -166,7 +167,7 @@ export class AuthService {
         return { success: false, message: 'No authentication token found' };
       }
 
-      const response = await fetch('/api/user/profile', {
+      const response = await fetch(`${this.BACKEND_URL}/api/user/profile`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,

@@ -2,6 +2,8 @@ import React, { useState, useEffect } from 'react';
 import { useAdminAuth } from '../hooks/useAdminAuth';
 import './AdminPage.css';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+
 interface User {
   _id: string;
   userName: string;
@@ -62,7 +64,7 @@ const AdminPage: React.FC = () => {
       }
 
       // Fetch users with pagination and search
-      const usersResponse = await fetch(`/api/admin/users?page=${page}&limit=10&search=${encodeURIComponent(search)}`, {
+      const usersResponse = await fetch(`${BACKEND_URL}/api/admin/users?page=${page}&limit=10&search=${encodeURIComponent(search)}`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -100,7 +102,7 @@ const AdminPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch(`/api/admin/users/${userId}`, {
+      const response = await fetch(`${BACKEND_URL}/api/admin/users/${userId}`, {
         method: 'DELETE',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -144,7 +146,7 @@ const AdminPage: React.FC = () => {
         updateData.password = editingUser.password;
       }
 
-      const response = await fetch(`/api/admin/users/${editingUser._id}`, {
+      const response = await fetch(`${BACKEND_URL}/api/admin/users/${editingUser._id}`, {
         method: 'PUT',
         headers: {
           'Authorization': `Bearer ${token}`,
@@ -175,7 +177,7 @@ const AdminPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('admin_token');
-      const response = await fetch('/api/admin/users', {
+      const response = await fetch(`${BACKEND_URL}/api/admin/users`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,

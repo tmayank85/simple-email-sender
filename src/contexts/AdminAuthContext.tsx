@@ -1,6 +1,8 @@
 import React, { createContext, useState, useEffect } from 'react';
 import type { ReactNode } from 'react';
 
+const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
+
 interface AdminAuthContextType {
   isAuthenticated: boolean;
   userInfo: { email: string; name: string; loginTime: string } | null;
@@ -41,7 +43,7 @@ export const AdminAuthProvider: React.FC<AdminAuthProviderProps> = ({ children }
 
     try {
       // Make API call to admin login endpoint
-      const response = await fetch('/api/admin/login', {
+      const response = await fetch(`${BACKEND_URL}/api/admin/login`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',

@@ -49,7 +49,7 @@ interface ServerInfoResponse {
 }
 
 export class EmailService {
-  private static readonly API_BASE_URL = 'http://localhost:4000'; // Backend API URL
+  private static readonly BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
   static async sendEmails(emailData: EmailData): Promise<EmailResponse> {
     try {
@@ -101,7 +101,7 @@ export class EmailService {
   static async checkHealth(): Promise<EmailResponse> {
     try {
       // Check mediator health first
-      const response = await fetch(`/api/health`);
+      const response = await fetch(`${this.BACKEND_URL}/api/health`);
       const result = await response.json();
       return result;
     } catch (error) {
@@ -123,7 +123,7 @@ export class EmailService {
         };
       }
 
-      const response = await fetch(`/api/worker/health`, {
+      const response = await fetch(`${this.BACKEND_URL}/api/worker/health`, {
         headers: {
           'Authorization': `Bearer ${token}`,
         },
@@ -150,7 +150,7 @@ export class EmailService {
       }
 
       // Use the mediator API endpoint with authentication
-      const response = await fetch(`/api/server-info`, {
+      const response = await fetch(`${this.BACKEND_URL}/api/server-info`, {
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
@@ -193,7 +193,7 @@ export class EmailService {
       }
 
       // Use the mediator API endpoint instead of direct worker server
-      const response = await fetch(`/api/send-email`, {
+      const response = await fetch(`${this.BACKEND_URL}/api/send-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
@@ -301,7 +301,7 @@ export class EmailService {
   }
 
   static getEmailServiceInfo(): string {
-    return `Using Email Service API at ${this.API_BASE_URL} with Gmail SMTP backend`;
+    return `Using Email Service API at ${this.BACKEND_URL} with Gmail SMTP backend`;
   }
 
   static getServerInfoEndpoint(): string {
