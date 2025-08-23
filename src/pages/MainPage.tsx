@@ -20,6 +20,42 @@ const MainPage: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<string>('');
   const [headerServerInfo, setHeaderServerInfo] = useState<string>('');
 
+  // Helper function to format uptime
+  const formatUptime = (uptimeInSeconds: number): string => {
+    const minutes = Math.floor(uptimeInSeconds / 60);
+    
+    if (minutes < 60) {
+      return `${minutes}min`;
+    } else if (minutes < 1440) { // Less than 24 hours (1440 minutes)
+      const hours = Math.floor(minutes / 60);
+      const remainingMinutes = minutes % 60;
+      return remainingMinutes > 0 ? `${hours}h ${remainingMinutes}min` : `${hours}h`;
+    } else { // 24+ hours
+      const days = Math.floor(minutes / 1440);
+      const remainingHours = Math.floor((minutes % 1440) / 60);
+      const remainingMinutes = minutes % 60;
+      
+      let result = `${days}d`;
+      if (remainingHours > 0) result += ` ${remainingHours}h`;
+      if (remainingMinutes > 0 && days < 7) result += ` ${remainingMinutes}min`; // Show minutes only for less than a week
+      
+      return result;
+    }
+  };
+
+  // Helper function to update local email count
+  const updateLocalEmailCount = (additionalCount: number) => {
+    if (headerServerInfo && headerServerInfo !== 'Unavailable|No IP|Unknown|0|0') {
+      const parts = headerServerInfo.split('|');
+      if (parts.length >= 5) {
+        const currentCount = parseInt(parts[4]) || 0;
+        const newCount = currentCount + additionalCount;
+        parts[4] = newCount.toString();
+        setHeaderServerInfo(parts.join('|'));
+      }
+    }
+  };
+
   // Test comprehensive server availability
   const testServerAvailability = async () => {
     try {
@@ -79,15 +115,15 @@ const MainPage: React.FC = () => {
         const serverName = result.data.hostname || 'Unknown Server';
         const serverIP = result.data.primaryIp || 'No IP';
         const platform = result.data.platform || 'Unknown';
-        const uptime = result.data.uptime ? Math.floor(result.data.uptime / 60) : 0; // Convert to minutes
+        const uptime = formatUptime(result.data.uptime || 0); // Use formatted uptime
         const emailCount = result.data.newServerEmailCount || 0; // Get email sent count
         
         setHeaderServerInfo(`${serverName}|${serverIP}|${platform}|${uptime}|${emailCount}`);
       } else {
-        setHeaderServerInfo('Unavailable|No IP|Unknown|0|0');
+        setHeaderServerInfo('Unavailable|No IP|Unknown|0min|0');
       }
     } catch {
-      setHeaderServerInfo('Unavailable|No IP|Unknown|0|0');
+      setHeaderServerInfo('Unavailable|No IP|Unknown|0min|0');
     }
   };
 
@@ -142,6 +178,10 @@ const MainPage: React.FC = () => {
       if (result.success) {
         const successMessage = `✅ ${result.message}`;
         setLastResult(successMessage);
+        
+        // Update local email count based on number of recipients
+        updateLocalEmailCount(validRecipients.length);
+        
         // Show browser alert for immediate notification
         alert(`Success! ${result.message}`);
         // Scroll to top to show the success message
@@ -172,7 +212,7 @@ const MainPage: React.FC = () => {
           <div className="header-left">
             <div className="title-section">
               <h1>Simple Email Sender</h1>
-              {headerServerInfo && headerServerInfo !== 'Unavailable|No IP|Unknown|0' && (
+              {headerServerInfo && headerServerInfo !== 'Unavailable|No IP|Unknown|0min|0' && (
                 <div className="backend-server-info">
                   <span className="server-label">Backend Server:</span>
                   <div className="server-details-group">
@@ -192,7 +232,7 @@ const MainPage: React.FC = () => {
                       className="server-detail-item"
                       title={`Server Platform: ${headerServerInfo.split('|')[2]} | Full Backend Details`}
                     >
-                      ⏱️ {headerServerInfo.split('|')[3]}min uptime
+                      ⏱️ {headerServerInfo.split('|')[3]} uptime
                     </span>
                     <span 
                       className="server-detail-item"
@@ -297,7 +337,7 @@ const MainPage: React.FC = () => {
                   <div className="form-group">
                     <label htmlFor="senderPassword">App Password *</label>
                     <input
-                      type="password"
+                      type="text"
                       id="senderPassword"
                       value={senderPassword}
                       onChange={(e) => setSenderPassword(e.target.value)}
