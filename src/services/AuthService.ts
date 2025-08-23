@@ -1,52 +1,92 @@
-// Authentication service with hardcoded credentials
+// Authentication service using API endpoints
 export interface User {
+  id: string;
+  userName: string;
   email: string;
-  password: string;
-  name: string;
+  activeTill: string;
+  isActive: boolean;
+  orcaServerUrl: string;
+  createdAt: string;
+  updatedAt: string;
+}
+
+export interface LoginResponse {
+  success: boolean;
+  message: string;
+  data?: {
+    token: string;
+    user: User;
+  };
+  error?: string;
 }
 
 export class AuthService {
-  // Hardcoded user credentials
-  private static readonly HARDCODED_USER: User = {
-    email: 'arvindk@gmail.com',
-    password: 'Arvind@123K',
-    name: 'Arvind Kumar'
-  };
-
   private static readonly STORAGE_KEY = 'emailSender_auth';
+  private static readonly TOKEN_KEY = 'emailSender_token';
 
   /**
-   * Authenticate user with hardcoded credentials
+   * Authenticate user via API
    */
-  static authenticate(email: string, password: string): boolean {
-    const trimmedEmail = email.trim().toLowerCase();
+  static async authenticate(email: string, password: string): Promise<LoginResponse> {
+    const trimmedEmail = email.trim();
     const trimmedPassword = password.trim();
 
-    return (
-      trimmedEmail === this.HARDCODED_USER.email.toLowerCase() &&
-      trimmedPassword === this.HARDCODED_USER.password
-    );
+    try {
+      const response = await fetch('/api/auth/login', {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          email: trimmedEmail,
+          password: trimmedPassword,
+        }),
+      });
+
+      const data: LoginResponse = await response.json();
+
+      if (data.success && data.data) {
+        // Save authentication state
+        this.saveAuthState(data.data.user, data.data.token);
+        return data;
+      } else {
+        return {
+          success: false,
+          message: data.message || 'Login failed',
+          error: data.error,
+        };
+      }
+    } catch (error) {
+      console.error('Authentication error:', error);
+      return {
+        success: false,
+        message: 'Network error. Please check your connection and try again.',
+        error: 'Network error',
+      };
+    }
   }
 
   /**
    * Save authentication state to localStorage
    */
-  static saveAuthState(email: string): void {
+  static saveAuthState(user: User, token: string): void {
     const authData = {
-      email: email.trim(),
-      name: this.HARDCODED_USER.name,
+      email: user.email,
+      name: user.userName,
       loginTime: new Date().toISOString(),
-      isAuthenticated: true
+      isAuthenticated: true,
+      user: user,
     };
 
     localStorage.setItem(this.STORAGE_KEY, JSON.stringify(authData));
+    localStorage.setItem(this.TOKEN_KEY, token);
     localStorage.setItem('isLoggedIn', 'true'); // Backward compatibility
   }
 
   /**
    * Get saved authentication state from localStorage
    */
-  static getAuthState(): { email: string; name: string; loginTime: string } | null {
+  static getAuthState(): { email: string; name: string; loginTime: string; user?: User } | null {
     try {
       const authData = localStorage.getItem(this.STORAGE_KEY);
       if (authData) {
@@ -55,7 +95,8 @@ export class AuthService {
           return {
             email: parsed.email,
             name: parsed.name,
-            loginTime: parsed.loginTime
+            loginTime: parsed.loginTime,
+            user: parsed.user,
           };
         }
       }
@@ -67,11 +108,19 @@ export class AuthService {
   }
 
   /**
+   * Get stored JWT token
+   */
+  static getToken(): string | null {
+    return localStorage.getItem(this.TOKEN_KEY);
+  }
+
+  /**
    * Check if user is currently authenticated
    */
   static isAuthenticated(): boolean {
     const authState = this.getAuthState();
-    return authState !== null;
+    const token = this.getToken();
+    return authState !== null && token !== null;
   }
 
   /**
@@ -79,17 +128,59 @@ export class AuthService {
    */
   static clearAuthState(): void {
     localStorage.removeItem(this.STORAGE_KEY);
+    localStorage.removeItem(this.TOKEN_KEY);
     localStorage.removeItem('isLoggedIn'); // Backward compatibility
   }
 
   /**
-   * Get hardcoded user info (for display purposes)
+   * Get user profile information via API
    */
-  static getHardcodedUserInfo(): { email: string; name: string } {
-    return {
-      email: this.HARDCODED_USER.email,
-      name: this.HARDCODED_USER.name
-    };
+  static async getUserProfile(): Promise<{ success: boolean; data?: User; message?: string }> {
+    try {
+      const token = this.getToken();
+      if (!token) {
+        return { success: false, message: 'No authentication token found' };
+      }
+
+      const response = await fetch('/api/user/profile', {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error fetching user profile:', error);
+      return { success: false, message: 'Network error' };
+    }
+  }
+
+  /**
+   * Update user profile via API
+   */
+  static async updateUserProfile(updates: Partial<User>): Promise<{ success: boolean; message: string }> {
+    try {
+      const token = this.getToken();
+      if (!token) {
+        return { success: false, message: 'No authentication token found' };
+      }
+
+      const response = await fetch('/api/user/profile', {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify(updates),
+      });
+
+      const data = await response.json();
+      return data;
+    } catch (error) {
+      console.error('Error updating user profile:', error);
+      return { success: false, message: 'Network error' };
+    }
   }
 
   /**

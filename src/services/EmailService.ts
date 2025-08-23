@@ -1,3 +1,5 @@
+import { AuthService } from './AuthService';
+
 interface EmailData {
   senderEmail: string;
   senderName: string;
@@ -30,12 +32,14 @@ interface ServerInfo {
     netmask: string;
   }>;
   primaryIP: string;
+  primaryIp: string; // Alternative property name used by API
   urls: {
     local: string;
     network: string;
   };
   uptime: number;
   timestamp: string;
+  newServerEmailCount: number; // Email sent count from server
 }
 
 interface ServerInfoResponse {
@@ -45,7 +49,7 @@ interface ServerInfoResponse {
 }
 
 export class EmailService {
-  private static readonly API_BASE_URL = 'https://email-sender-orca.onrender.com'; // Backend API URL
+  private static readonly API_BASE_URL = 'http://localhost:4000'; // Backend API URL
 
   static async sendEmails(emailData: EmailData): Promise<EmailResponse> {
     try {
@@ -96,7 +100,8 @@ export class EmailService {
 
   static async checkHealth(): Promise<EmailResponse> {
     try {
-      const response = await fetch(`${this.API_BASE_URL}/api/health`);
+      // Check mediator health first
+      const response = await fetch(`/api/health`);
       const result = await response.json();
       return result;
     } catch (error) {
@@ -108,11 +113,58 @@ export class EmailService {
     }
   }
 
+  static async checkWorkerHealth(): Promise<EmailResponse> {
+    try {
+      const token = AuthService.getToken();
+      if (!token) {
+        return {
+          success: false,
+          message: 'Authentication required'
+        };
+      }
+
+      const response = await fetch(`/api/worker/health`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+        },
+      });
+      const result = await response.json();
+      return result;
+    } catch (error) {
+      console.error('Worker health check failed:', error);
+      return {
+        success: false,
+        message: 'Failed to connect to worker server'
+      };
+    }
+  }
+
   static async getServerInfo(): Promise<ServerInfoResponse> {
     try {
-      const response = await fetch(`${this.API_BASE_URL}/api/server-info`);
+      const token = AuthService.getToken();
+      if (!token) {
+        return {
+          success: false,
+          message: 'Authentication required. Please login again.'
+        };
+      }
+
+      // Use the mediator API endpoint with authentication
+      const response = await fetch(`/api/server-info`, {
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
       
       if (!response.ok) {
+        if (response.status === 401) {
+          return {
+            success: false,
+            message: 'Authentication expired. Please login again.'
+          };
+        }
+        
         return {
           success: false,
           message: `Failed to fetch server info: ${response.status} ${response.statusText}`
@@ -132,15 +184,32 @@ export class EmailService {
 
   private static async sendEmailRequest(emailData: EmailData): Promise<EmailResponse> {
     try {
-      const response = await fetch(`${this.API_BASE_URL}/api/send-email`, {
+      const token = AuthService.getToken();
+      if (!token) {
+        return {
+          success: false,
+          message: 'Authentication required. Please login again.'
+        };
+      }
+
+      // Use the mediator API endpoint instead of direct worker server
+      const response = await fetch(`/api/send-email`, {
         method: 'POST',
         headers: {
           'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`,
         },
         body: JSON.stringify(emailData),
       });
 
       if (!response.ok) {
+        if (response.status === 401) {
+          return {
+            success: false,
+            message: 'Authentication expired. Please login again.'
+          };
+        }
+        
         const errorData = await response.json();
         return {
           success: false,
@@ -236,7 +305,7 @@ export class EmailService {
   }
 
   static getServerInfoEndpoint(): string {
-    return `${this.API_BASE_URL}/api/server-info`;
+    return `/api/server-info`;
   }
 
   static getAppPasswordInstructions(): string {

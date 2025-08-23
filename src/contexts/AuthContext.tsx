@@ -5,8 +5,9 @@ import { AuthService } from '../services/AuthService';
 interface AuthContextType {
   isAuthenticated: boolean;
   userInfo: { email: string; name: string; loginTime: string } | null;
-  login: (email: string, password: string) => { success: boolean; message: string };
+  login: (email: string, password: string) => Promise<{ success: boolean; message: string }>;
   logout: () => void;
+  loading: boolean;
 }
 
 const AuthContext = createContext<AuthContextType | undefined>(undefined);
@@ -26,6 +27,7 @@ interface AuthProviderProps {
 export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
   const [isAuthenticated, setIsAuthenticated] = useState<boolean>(false);
   const [userInfo, setUserInfo] = useState<{ email: string; name: string; loginTime: string } | null>(null);
+  const [loading, setLoading] = useState<boolean>(false);
 
   // Check authentication state on component mount
   useEffect(() => {
@@ -36,7 +38,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     }
   }, []);
 
-  const login = (email: string, password: string): { success: boolean; message: string } => {
+  const login = async (email: string, password: string): Promise<{ success: boolean; message: string }> => {
     // Validate input
     if (!email.trim()) {
       return { success: false, message: 'Email is required' };
@@ -50,19 +52,29 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
       return { success: false, message: 'Please enter a valid email address' };
     }
 
-    // Authenticate with hardcoded credentials
-    if (AuthService.authenticate(email, password)) {
-      setIsAuthenticated(true);
-      AuthService.saveAuthState(email);
-      
-      const authState = AuthService.getAuthState();
-      if (authState) {
-        setUserInfo(authState);
-      }
+    setLoading(true);
 
-      return { success: true, message: 'Login successful!' };
-    } else {
-      return { success: false, message: 'Invalid email or password' };
+    try {
+      // Authenticate via API
+      const result = await AuthService.authenticate(email, password);
+      
+      if (result.success) {
+        setIsAuthenticated(true);
+        
+        const authState = AuthService.getAuthState();
+        if (authState) {
+          setUserInfo(authState);
+        }
+
+        return { success: true, message: result.message };
+      } else {
+        return { success: false, message: result.message };
+      }
+    } catch (error) {
+      console.error('Login error:', error);
+      return { success: false, message: 'An unexpected error occurred. Please try again.' };
+    } finally {
+      setLoading(false);
     }
   };
 
@@ -77,6 +89,7 @@ export const AuthProvider: React.FC<AuthProviderProps> = ({ children }) => {
     userInfo,
     login,
     logout,
+    loading,
   };
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

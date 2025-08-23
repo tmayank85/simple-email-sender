@@ -18,18 +18,54 @@ const MainPage: React.FC = () => {
   const [connectionStatus, setConnectionStatus] = useState<string>('');
   const [headerServerInfo, setHeaderServerInfo] = useState<string>('');
 
-  // Test API connection
-  const testConnection = async () => {
+  // Test comprehensive server availability
+  const testServerAvailability = async () => {
     try {
-      setConnectionStatus('Testing connection...');
-      const result = await EmailService.checkHealth();
-      if (result.success) {
-        setConnectionStatus('✅ API connected successfully');
-      } else {
-        setConnectionStatus(`❌ API connection failed: ${result.message}`);
+      setConnectionStatus('Testing server availability...');
+      
+      const token = AuthService.getToken();
+      if (!token) {
+        setConnectionStatus('❌ Authentication required. Please login again.');
+        return;
       }
-    } catch {
-      setConnectionStatus('❌ Failed to connect to email service');
+
+      const response = await fetch('/api/health/comprehensive', {
+        method: 'GET',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      const result = await response.json();
+
+      if (response.ok && result.success) {
+        const { mediator, user, orcaServer } = result;
+        let status = '✅ All systems operational\n';
+        status += `📡 Mediator: ${mediator.status} (DB: ${mediator.database})\n`;
+        status += `👤 User: ${user.email} (${user.isActive ? 'Active' : 'Inactive'})\n`;
+        status += `🖥️ Orca Server: ${orcaServer.status}`;
+        
+        if (orcaServer.url) {
+          status += ` (${orcaServer.url})`;
+        }
+        
+        setConnectionStatus(status);
+      } else {
+        const { mediator, orcaServer } = result;
+        let status = '⚠️ System issues detected\n';
+        status += `📡 Mediator: ${mediator?.status || 'unknown'}\n`;
+        status += `🖥️ Orca Server: ${orcaServer?.status || 'unknown'}`;
+        
+        if (orcaServer?.error) {
+          status += ` - ${orcaServer.error}`;
+        }
+        
+        setConnectionStatus(status);
+      }
+    } catch (error) {
+      console.error('Server availability test failed:', error);
+      setConnectionStatus('❌ Failed to test server availability');
     }
   };
 
@@ -39,16 +75,17 @@ const MainPage: React.FC = () => {
       const result = await EmailService.getServerInfo();
       if (result.success && result.data) {
         const serverName = result.data.hostname || 'Unknown Server';
-        const serverIP = result.data.primaryIP || 'No IP';
+        const serverIP = result.data.primaryIp || 'No IP';
         const platform = result.data.platform || 'Unknown';
         const uptime = result.data.uptime ? Math.floor(result.data.uptime / 60) : 0; // Convert to minutes
+        const emailCount = result.data.newServerEmailCount || 0; // Get email sent count
         
-        setHeaderServerInfo(`${serverName}|${serverIP}|${platform}|${uptime}`);
+        setHeaderServerInfo(`${serverName}|${serverIP}|${platform}|${uptime}|${emailCount}`);
       } else {
-        setHeaderServerInfo('Unavailable|No IP|Unknown|0');
+        setHeaderServerInfo('Unavailable|No IP|Unknown|0|0');
       }
     } catch {
-      setHeaderServerInfo('Unavailable|No IP|Unknown|0');
+      setHeaderServerInfo('Unavailable|No IP|Unknown|0|0');
     }
   };
 
@@ -155,6 +192,12 @@ const MainPage: React.FC = () => {
                     >
                       ⏱️ {headerServerInfo.split('|')[3]}min uptime
                     </span>
+                    <span 
+                      className="server-detail-item"
+                      title="Total Emails Sent from Server"
+                    >
+                      📧 {headerServerInfo.split('|')[4]} sent
+                    </span>
                   </div>
                 </div>
               )}
@@ -162,7 +205,7 @@ const MainPage: React.FC = () => {
             <div className="api-status">
               <button 
                 type="button" 
-                onClick={testConnection} 
+                onClick={testServerAvailability} 
                 className="test-connection-btn"
                 style={{ 
                   fontSize: '0.8rem', 
@@ -175,10 +218,16 @@ const MainPage: React.FC = () => {
                   cursor: 'pointer'
                 }}
               >
-                Test API
+                Test Server Availability
               </button>
               {connectionStatus && (
-                <div style={{ fontSize: '0.8rem', marginTop: '4px', color: connectionStatus.includes('✅') ? '#28a745' : '#dc3545' }}>
+                <div style={{ 
+                  fontSize: '0.8rem', 
+                  marginTop: '4px', 
+                  color: connectionStatus.includes('✅') ? '#28a745' : '#dc3545',
+                  whiteSpace: 'pre-line',
+                  lineHeight: '1.3'
+                }}>
                   {connectionStatus}
                 </div>
               )}
