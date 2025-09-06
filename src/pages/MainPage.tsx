@@ -19,6 +19,14 @@ const MainPage: React.FC = () => {
   const [showInstructions, setShowInstructions] = useState(false);
   const [connectionStatus, setConnectionStatus] = useState<string>('');
   const [headerServerInfo, setHeaderServerInfo] = useState<string>('');
+  
+  // New states for enhanced functionality
+  const [sendMode, setSendMode] = useState<'instant' | 'background'>('instant');
+  const [selectedServerId, setSelectedServerId] = useState<string>('');
+  const [priority, setPriority] = useState<number>(1);
+  const [userServers, setUserServers] = useState<any[]>([]);
+  const [activeJobs, setActiveJobs] = useState<any[]>([]);
+  const [showJobMonitor, setShowJobMonitor] = useState(false);
 
   // Helper function to format uptime
   const formatUptime = (uptimeInSeconds: number): string => {
@@ -130,7 +138,54 @@ const MainPage: React.FC = () => {
   // Load server info on component mount
   useEffect(() => {
     loadHeaderServerInfo();
+    loadUserServers();
+    loadActiveJobs();
   }, []);
+
+  // Load user's configured servers
+  const loadUserServers = async () => {
+    try {
+      const response = await fetch(`${BACKEND_URL}/api/user/servers`, {
+        headers: {
+          'Authorization': `Bearer ${AuthService.getToken()}`,
+          'Content-Type': 'application/json',
+        },
+      });
+
+      if (response.ok) {
+        const result = await response.json();
+        if (result.success) {
+          setUserServers(result.data.servers || []);
+          // Set default server if available
+          if (result.data.defaultServerId && !selectedServerId) {
+            setSelectedServerId(result.data.defaultServerId);
+          }
+        }
+      }
+    } catch (error) {
+      console.error('Failed to load user servers:', error);
+    }
+  };
+
+  // Load active email jobs
+  const loadActiveJobs = async () => {
+    try {
+      const result = await EmailService.getEmailJobs('processing', 10);
+      if (result.success && result.data) {
+        setActiveJobs(result.data);
+      }
+    } catch (error) {
+      console.error('Failed to load active jobs:', error);
+    }
+  };
+
+  // Refresh jobs periodically when monitoring
+  useEffect(() => {
+    if (showJobMonitor) {
+      const interval = setInterval(loadActiveJobs, 5000); // Refresh every 5 seconds
+      return () => clearInterval(interval);
+    }
+  }, [showJobMonitor]);
 
   const handleLogout = () => {
     logout();
@@ -163,34 +218,58 @@ const MainPage: React.FC = () => {
         return;
       }
 
-      // Send emails using EmailService
+      // Prepare email data
       const emailData = {
         senderEmail: senderEmail.trim(),
         senderName: senderName.trim(),
         appPassword: senderPassword.trim(),
         recipients: validRecipients,
         subject: subject.trim(),
-        template: template.trim() // Send as plain text, HTML processing happens on backend
+        template: template.trim(),
+        serverId: selectedServerId || undefined, // Include server selection
+        priority: sendMode === 'background' ? priority : undefined
       };
 
-      const result = await EmailService.sendEmails(emailData);
+      let result;
 
-      if (result.success) {
-        const successMessage = `✅ ${result.message}`;
-        setLastResult(successMessage);
+      if (sendMode === 'background') {
+        // Use background email sending
+        result = await EmailService.sendEmailsBackground(emailData);
         
-        // Update local email count based on number of recipients
-        updateLocalEmailCount(validRecipients.length);
-        
-        // Show browser alert for immediate notification
-        alert(`Success! ${result.message}`);
-        // Scroll to top to show the success message
-        window.scrollTo({ top: 0, behavior: 'smooth' });
+        if (result.success) {
+          const successMessage = `✅ Background job created successfully! Job ID: ${result.data?.jobId}`;
+          setLastResult(successMessage);
+          
+          // Show browser alert for immediate notification
+          alert(`Background Email Job Created!\n\nJob ID: ${result.data?.jobId}\nTotal Emails: ${validRecipients.length}\nEstimated Completion: ${result.data?.estimatedCompletionTime || 'Unknown'}\n\nYou can monitor progress in the Job Monitor.`);
+          
+          // Refresh active jobs
+          loadActiveJobs();
+        } else {
+          setLastResult(`❌ ${result.message}`);
+        }
       } else {
-        setLastResult(`❌ ${result.message}`);
+        // Use instant email sending
+        result = await EmailService.sendEmails(emailData);
+
+        if (result.success) {
+          const successMessage = `✅ ${result.message}`;
+          setLastResult(successMessage);
+          
+          // Update local email count based on number of recipients
+          updateLocalEmailCount(validRecipients.length);
+          
+          // Show browser alert for immediate notification
+          alert(`Success! ${result.message}`);
+          // Scroll to top to show the success message
+          window.scrollTo({ top: 0, behavior: 'smooth' });
+        } else {
+          setLastResult(`❌ ${result.message}`);
+        }
       }
 
-    } catch {
+    } catch (error) {
+      console.error('Send email error:', error);
       setLastResult('❌ An unexpected error occurred. Please try again.');
     } finally {
       setIsLoading(false);
@@ -244,6 +323,63 @@ const MainPage: React.FC = () => {
                 </div>
               )}
             </div>
+
+            {/* Compact Send Options in Header */}
+            <div className="header-send-options">
+              <div className="send-mode-compact">
+                <label className="compact-radio">
+                  <input
+                    type="radio"
+                    value="instant"
+                    checked={sendMode === 'instant'}
+                    onChange={(e) => setSendMode(e.target.value as 'instant' | 'background')}
+                  />
+                  <span>⚡ Instant</span>
+                </label>
+                <label className="compact-radio">
+                  <input
+                    type="radio"
+                    value="background"
+                    checked={sendMode === 'background'}
+                    onChange={(e) => setSendMode(e.target.value as 'instant' | 'background')}
+                  />
+                  <span>🔄 Background</span>
+                </label>
+              </div>
+              
+              {userServers.length > 0 && (
+                <div className="server-select-compact">
+                  <select
+                    value={selectedServerId}
+                    onChange={(e) => setSelectedServerId(e.target.value)}
+                    title="Select server or leave auto for load balancing"
+                  >
+                    <option value="">🎯 Auto-Select Server</option>
+                    {userServers.map((server) => (
+                      <option key={server.serverId} value={server.serverId}>
+                        {server.isActive ? '🟢' : '🔴'} {server.serverName} 
+                        {server.isBusy ? ' (Busy)' : ''} ({server.emailCount || 0})
+                      </option>
+                    ))}
+                  </select>
+                </div>
+              )}
+
+              {sendMode === 'background' && (
+                <div className="priority-select-compact">
+                  <select
+                    value={priority}
+                    onChange={(e) => setPriority(Number(e.target.value))}
+                    title="Job priority for background processing"
+                  >
+                    <option value={1}>🔥 High Priority</option>
+                    <option value={2}>⚡ Normal Priority</option>
+                    <option value={3}>🐌 Low Priority</option>
+                  </select>
+                </div>
+              )}
+            </div>
+
             <div className="api-status">
               <button 
                 type="button" 
@@ -276,6 +412,18 @@ const MainPage: React.FC = () => {
             </div>
           </div>
           <div className="user-section">
+            {/* Compact Job Monitor Toggle */}
+            {activeJobs.length > 0 && (
+              <button
+                type="button"
+                onClick={() => setShowJobMonitor(!showJobMonitor)}
+                className="compact-job-monitor"
+                title={`${activeJobs.length} active background jobs`}
+              >
+                🔄 Jobs ({activeJobs.length})
+              </button>
+            )}
+
             {userInfo && (
               <div className="user-info">
                 <div className="user-details">
@@ -293,6 +441,64 @@ const MainPage: React.FC = () => {
           </div>
         </div>
       </header>
+
+      {/* Compact Job Monitor Panel */}
+      {showJobMonitor && activeJobs.length > 0 && (
+        <div className="compact-job-monitor-panel">
+          <div className="job-monitor-content">
+            <h3>Active Background Jobs</h3>
+            <div className="jobs-grid">
+              {activeJobs.map((job) => (
+                <div key={job.jobId} className="compact-job-item">
+                  <div className="job-info">
+                    <span className="job-id">#{job.jobId.slice(-6)}</span>
+                    <span className={`job-status ${job.status}`}>{job.status}</span>
+                  </div>
+                  <div className="job-progress-compact">
+                    <div className="progress-bar-mini">
+                      <div 
+                        className="progress-fill-mini"
+                        style={{ width: `${job.progress || 0}%` }}
+                      ></div>
+                    </div>
+                    <span className="progress-text-mini">
+                      {job.sentEmails}/{job.totalEmails} ({Math.round(job.progress || 0)}%)
+                    </span>
+                  </div>
+                  <div className="job-actions-compact">
+                    {job.status === 'processing' && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const result = await EmailService.pauseJob(job.jobId);
+                          if (result.success) loadActiveJobs();
+                        }}
+                        className="job-action-mini pause"
+                        title="Pause job"
+                      >
+                        ⏸️
+                      </button>
+                    )}
+                    {job.status === 'paused' && (
+                      <button
+                        type="button"
+                        onClick={async () => {
+                          const result = await EmailService.resumeJob(job.jobId);
+                          if (result.success) loadActiveJobs();
+                        }}
+                        className="job-action-mini resume"
+                        title="Resume job"
+                      >
+                        ▶️
+                      </button>
+                    )}
+                  </div>
+                </div>
+              ))}
+            </div>
+          </div>
+        </div>
+      )}
 
       <main className="main-content">
         <div className="email-form-container">
@@ -453,7 +659,10 @@ const MainPage: React.FC = () => {
                 className="send-button"
                 disabled={isLoading}
               >
-                {isLoading ? 'Sending...' : 'Send Emails'}
+                {isLoading 
+                  ? (sendMode === 'background' ? 'Creating Job...' : 'Sending...') 
+                  : (sendMode === 'background' ? 'Create Background Job' : 'Send Emails Instantly')
+                }
               </button>
             </div>
           </div>

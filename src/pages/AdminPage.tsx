@@ -4,6 +4,18 @@ import './AdminPage.css';
 
 const BACKEND_URL = import.meta.env.VITE_BACKEND_URL || '';
 
+interface Server {
+  serverId: string;
+  serverName: string;
+  serverUrl: string;
+  serverIp: string;
+  emailCount: number;
+  uptime: number;
+  lastSeen: string;
+  isActive: boolean;
+  serverDetail: string;
+}
+
 interface User {
   _id: string;
   userName: string;
@@ -11,13 +23,11 @@ interface User {
   password?: string; // Optional for editing - only sent when updating
   isActive: boolean;
   activeTill: string;
-  newServerEmailCount: number;
-  oldServerEmailCount: number;
-  orcaServerUrl: string;
-  oldServerDetail: string;
-  newServerDetail: string;
-  createdAt: string;
-  updatedAt: string;
+  // Multi-server support
+  servers: Server[];
+  defaultServerId: string;
+  createdAt?: string;
+  updatedAt?: string;
 }
 
 const AdminPage: React.FC = () => {
@@ -35,6 +45,19 @@ const AdminPage: React.FC = () => {
   const [totalPages, setTotalPages] = useState(1);
   const [deleteConfirm, setDeleteConfirm] = useState<string | null>(null);
 
+  // Server management state
+  const [showServerForm, setShowServerForm] = useState(false);
+  const [newServer, setNewServer] = useState({
+    serverName: '',
+    serverUrl: '',
+    serverIp: '',
+    emailCount: 0,
+    uptime: 0,
+    lastSeen: new Date().toISOString(),
+    isActive: true,
+    serverDetail: ''
+  });
+
   // Registration form state
   const [newUser, setNewUser] = useState({
     userName: '',
@@ -42,11 +65,9 @@ const AdminPage: React.FC = () => {
     password: '',
     activeTill: '',
     isActive: true,
-    orcaServerUrl: '',
-    oldServerDetail: '',
-    newServerDetail: '',
-    oldServerEmailCount: 0,
-    newServerEmailCount: 0
+    // Multi-server support
+    servers: [] as Server[],
+    defaultServerId: ''
   });
 
   useEffect(() => {
@@ -128,17 +149,13 @@ const AdminPage: React.FC = () => {
     try {
       const token = localStorage.getItem('admin_token');
       
-      // Prepare update data - only include password if it's not empty
+      // Prepare update data - only basic user fields, not servers array
       const updateData: Partial<User> & { password?: string } = {
         userName: editingUser.userName,
         email: editingUser.email,
         activeTill: editingUser.activeTill,
         isActive: editingUser.isActive,
-        orcaServerUrl: editingUser.orcaServerUrl,
-        oldServerDetail: editingUser.oldServerDetail,
-        newServerDetail: editingUser.newServerDetail,
-        oldServerEmailCount: editingUser.oldServerEmailCount,
-        newServerEmailCount: editingUser.newServerEmailCount
+        defaultServerId: editingUser.defaultServerId || ''
       };
 
       // Only include password if user entered a new one
@@ -161,6 +178,7 @@ const AdminPage: React.FC = () => {
         setShowEditForm(false);
         setEditingUser(null);
         fetchAdminData(currentPage, searchTerm);
+        alert('✅ User updated successfully!');
       } else {
         alert(`Failed to update user: ${data.message || 'Unknown error'}`);
       }
@@ -177,13 +195,14 @@ const AdminPage: React.FC = () => {
 
     try {
       const token = localStorage.getItem('admin_token');
+      // Send complete user object with all fields including servers array
       const response = await fetch(`${BACKEND_URL}/api/admin/users`, {
         method: 'POST',
         headers: {
           'Authorization': `Bearer ${token}`,
           'Content-Type': 'application/json',
         },
-        body: JSON.stringify(newUser),
+        body: JSON.stringify(newUser), // Includes servers[] and defaultServerId
       });
 
       const data = await response.json();
@@ -196,11 +215,9 @@ const AdminPage: React.FC = () => {
           password: '',
           activeTill: '',
           isActive: true,
-          orcaServerUrl: '',
-          oldServerDetail: '',
-          newServerDetail: '',
-          oldServerEmailCount: 0,
-          newServerEmailCount: 0
+          // Multi-server support
+          servers: [] as Server[],
+          defaultServerId: ''
         });
         // Refresh user list
         fetchAdminData(currentPage, searchTerm);
@@ -220,6 +237,142 @@ const AdminPage: React.FC = () => {
   const handleInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLTextAreaElement>) => {
     const { name, value, type } = e.target;
     setNewUser(prev => ({
+      ...prev,
+      [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : 
+              type === 'number' ? parseInt(value) || 0 : value
+    }));
+  };
+
+  // Server management functions
+  const addServerToUser = async () => {
+    if (!editingUser) return;
+
+    // Validate required fields
+    if (!newServer.serverName || !newServer.serverUrl) {
+      alert('❌ Please fill in both Server Name and Server URL');
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('admin_token');
+      
+      const response = await fetch(`${BACKEND_URL}/api/admin/users/${editingUser._id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          addServer: {
+            serverName: newServer.serverName,
+            serverUrl: newServer.serverUrl,
+            serverIp: newServer.serverIp,
+            serverDetail: newServer.serverDetail
+          }
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update local state with the response
+        setEditingUser(data.data);
+        // Reset server form
+        setNewServer({
+          serverName: '',
+          serverUrl: '',
+          serverIp: '',
+          emailCount: 0,
+          uptime: 0,
+          lastSeen: new Date().toISOString(),
+          isActive: true,
+          serverDetail: ''
+        });
+        setShowServerForm(false);
+        alert('✅ Server added successfully!');
+      } else {
+        alert(`❌ Failed to add server: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Add server error:', err);
+      alert('❌ Network error occurred while adding server');
+    }
+  };
+
+  const removeServerFromUser = async (serverId: string) => {
+    if (!editingUser) return;
+
+    if (!confirm('Are you sure you want to remove this server?')) {
+      return;
+    }
+
+    try {
+      const token = localStorage.getItem('admin_token');
+      
+      const response = await fetch(`${BACKEND_URL}/api/admin/users/${editingUser._id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          removeServerId: serverId
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update local state with the response
+        setEditingUser(data.data);
+        alert('✅ Server removed successfully!');
+      } else {
+        alert(`❌ Failed to remove server: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Remove server error:', err);
+      alert('❌ Network error occurred while removing server');
+    }
+  };
+
+  const updateServerForUser = async (serverId: string, updatedServerData: Partial<Server>) => {
+    if (!editingUser) return;
+
+    try {
+      const token = localStorage.getItem('admin_token');
+      
+      const response = await fetch(`${BACKEND_URL}/api/admin/users/${editingUser._id}`, {
+        method: 'PUT',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json',
+        },
+        body: JSON.stringify({
+          updateServer: {
+            serverId,
+            ...updatedServerData
+          }
+        }),
+      });
+
+      const data = await response.json();
+
+      if (response.ok && data.success) {
+        // Update local state with the response
+        setEditingUser(data.data);
+        alert('✅ Server updated successfully!');
+      } else {
+        alert(`❌ Failed to update server: ${data.message || 'Unknown error'}`);
+      }
+    } catch (err) {
+      console.error('Update server error:', err);
+      alert('❌ Network error occurred while updating server');
+    }
+  };
+
+  const handleServerInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
+    const { name, value, type } = e.target;
+    setNewServer(prev => ({
       ...prev,
       [name]: type === 'checkbox' ? (e.target as HTMLInputElement).checked : 
               type === 'number' ? parseInt(value) || 0 : value
@@ -337,19 +490,6 @@ const AdminPage: React.FC = () => {
 
                   <div className="form-row">
                     <div className="form-group">
-                      <label htmlFor="orcaServerUrl">Orca Server URL</label>
-                      <input
-                        type="url"
-                        id="orcaServerUrl"
-                        name="orcaServerUrl"
-                        value={newUser.orcaServerUrl}
-                        onChange={handleInputChange}
-                        className="admin-form-input"
-                        placeholder="http://localhost:3000"
-                        disabled={registrationLoading}
-                      />
-                    </div>
-                    <div className="form-group">
                       <label>
                         <input
                           type="checkbox"
@@ -361,62 +501,6 @@ const AdminPage: React.FC = () => {
                         />
                         Is Active
                       </label>
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="oldServerDetail">Old Server Detail</label>
-                      <textarea
-                        id="oldServerDetail"
-                        name="oldServerDetail"
-                        value={newUser.oldServerDetail}
-                        onChange={handleInputChange}
-                        className="admin-form-input"
-                        rows={3}
-                        disabled={registrationLoading}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="newServerDetail">New Server Detail</label>
-                      <textarea
-                        id="newServerDetail"
-                        name="newServerDetail"
-                        value={newUser.newServerDetail}
-                        onChange={handleInputChange}
-                        className="admin-form-input"
-                        rows={3}
-                        disabled={registrationLoading}
-                      />
-                    </div>
-                  </div>
-
-                  <div className="form-row">
-                    <div className="form-group">
-                      <label htmlFor="oldServerEmailCount">Old Server Email Count</label>
-                      <input
-                        type="number"
-                        id="oldServerEmailCount"
-                        name="oldServerEmailCount"
-                        value={newUser.oldServerEmailCount}
-                        onChange={handleInputChange}
-                        className="admin-form-input"
-                        min="0"
-                        disabled={registrationLoading}
-                      />
-                    </div>
-                    <div className="form-group">
-                      <label htmlFor="newServerEmailCount">New Server Email Count</label>
-                      <input
-                        type="number"
-                        id="newServerEmailCount"
-                        name="newServerEmailCount"
-                        value={newUser.newServerEmailCount}
-                        onChange={handleInputChange}
-                        className="admin-form-input"
-                        min="0"
-                        disabled={registrationLoading}
-                      />
                     </div>
                   </div>
 
@@ -484,7 +568,8 @@ const AdminPage: React.FC = () => {
                       <th>Email</th>
                       <th>Active Till</th>
                       <th>Status</th>
-                      <th>Server URL</th>
+                      <th>Servers</th>
+                      <th>Default Server</th>
                       <th>Email Count</th>
                       <th>Actions</th>
                     </tr>
@@ -500,9 +585,38 @@ const AdminPage: React.FC = () => {
                             {user.isActive ? 'Active' : 'Inactive'}
                           </span>
                         </td>
-                        <td>{user.orcaServerUrl || 'N/A'}</td>
                         <td>
-                          Old: {user.oldServerEmailCount || 0}, New: {user.newServerEmailCount || 0}
+                          {user.servers && user.servers.length > 0 ? (
+                            <div style={{ fontSize: '0.8rem' }}>
+                              {user.servers.map(server => (
+                                <div key={server.serverId} style={{ marginBottom: '2px' }}>
+                                  <strong>{server.serverName}</strong>
+                                  <br />
+                                  <span style={{ color: server.isActive ? 'green' : 'red' }}>
+                                    {server.isActive ? '🟢' : '🔴'} {server.serverUrl}
+                                  </span>
+                                  <br />
+                                  <small>Emails: {server.emailCount || 0}</small>
+                                </div>
+                              ))}
+                            </div>
+                          ) : (
+                            <span style={{ color: '#888' }}>No servers</span>
+                          )}
+                        </td>
+                        <td>
+                          {user.defaultServerId ? (
+                            <span style={{ fontSize: '0.8rem' }}>
+                              {user.servers?.find(s => s.serverId === user.defaultServerId)?.serverName || user.defaultServerId}
+                            </span>
+                          ) : (
+                            <span style={{ color: '#888' }}>None</span>
+                          )}
+                        </td>
+                        <td>
+                          <div style={{ fontSize: '0.8rem' }}>
+                            <div>Total: {(user.servers || []).reduce((sum, s) => sum + (s.emailCount || 0), 0)}</div>
+                          </div>
                         </td>
                         <td>
                           <div className="table-actions">
@@ -526,7 +640,7 @@ const AdminPage: React.FC = () => {
                       </tr>
                     )) : (
                       <tr>
-                        <td colSpan={7} style={{ textAlign: 'center', padding: '2rem' }}>
+                        <td colSpan={9} style={{ textAlign: 'center', padding: '2rem' }}>
                           {searchTerm ? 'No users found matching your search.' : 'No users found.'}
                         </td>
                       </tr>
@@ -630,17 +744,6 @@ const AdminPage: React.FC = () => {
 
                     <div className="form-row">
                       <div className="form-group">
-                        <label htmlFor="edit-orcaServerUrl">Orca Server URL</label>
-                        <input
-                          type="url"
-                          id="edit-orcaServerUrl"
-                          value={editingUser.orcaServerUrl || ''}
-                          onChange={(e) => setEditingUser({...editingUser, orcaServerUrl: e.target.value})}
-                          className="admin-form-input"
-                          placeholder="http://localhost:3000"
-                        />
-                      </div>
-                      <div className="form-group">
                         <label>
                           <input
                             type="checkbox"
@@ -653,54 +756,169 @@ const AdminPage: React.FC = () => {
                       </div>
                     </div>
 
-                    <div className="form-row">
-                      <div className="form-group">
-                        <label htmlFor="edit-oldServerDetail">Old Server Detail</label>
-                        <textarea
-                          id="edit-oldServerDetail"
-                          value={editingUser.oldServerDetail || ''}
-                          onChange={(e) => setEditingUser({...editingUser, oldServerDetail: e.target.value})}
-                          className="admin-form-input"
-                          rows={3}
-                          placeholder="Details about the old server configuration"
-                        />
+                    {/* Server Management Section */}
+                    <div className="form-section">
+                      <div className="form-section-header">
+                        <h4>Server Management</h4>
+                        <button
+                          type="button"
+                          className="admin-btn small primary"
+                          onClick={() => setShowServerForm(!showServerForm)}
+                        >
+                          {showServerForm ? 'Cancel' : 'Add Server'}
+                        </button>
                       </div>
-                      <div className="form-group">
-                        <label htmlFor="edit-newServerDetail">New Server Detail</label>
-                        <textarea
-                          id="edit-newServerDetail"
-                          value={editingUser.newServerDetail || ''}
-                          onChange={(e) => setEditingUser({...editingUser, newServerDetail: e.target.value})}
-                          className="admin-form-input"
-                          rows={3}
-                          placeholder="Details about the new server configuration"
-                        />
-                      </div>
-                    </div>
 
-                    <div className="form-row">
+                      {/* Default Server Selection */}
                       <div className="form-group">
-                        <label htmlFor="edit-oldServerEmailCount">Old Server Email Count</label>
-                        <input
-                          type="number"
-                          id="edit-oldServerEmailCount"
-                          value={editingUser.oldServerEmailCount || 0}
-                          onChange={(e) => setEditingUser({...editingUser, oldServerEmailCount: parseInt(e.target.value) || 0})}
+                        <label htmlFor="edit-defaultServerId">Default Server</label>
+                        <select
+                          id="edit-defaultServerId"
+                          value={editingUser.defaultServerId || ''}
+                          onChange={(e) => setEditingUser({...editingUser, defaultServerId: e.target.value})}
                           className="admin-form-input"
-                          min="0"
-                        />
+                        >
+                          <option value="">No default server</option>
+                          {(editingUser.servers || []).map(server => (
+                            <option key={server.serverId} value={server.serverId}>
+                              {server.serverName} ({server.serverUrl})
+                            </option>
+                          ))}
+                        </select>
                       </div>
-                      <div className="form-group">
-                        <label htmlFor="edit-newServerEmailCount">New Server Email Count</label>
-                        <input
-                          type="number"
-                          id="edit-newServerEmailCount"
-                          value={editingUser.newServerEmailCount || 0}
-                          onChange={(e) => setEditingUser({...editingUser, newServerEmailCount: parseInt(e.target.value) || 0})}
-                          className="admin-form-input"
-                          min="0"
-                        />
-                      </div>
+
+                      {/* Add New Server Form */}
+                      {showServerForm && (
+                        <div className="form-subsection">
+                          <h5>Add New Server (Server ID will be auto-generated)</h5>
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label htmlFor="new-serverName">Server Name *</label>
+                              <input
+                                type="text"
+                                id="new-serverName"
+                                name="serverName"
+                                value={newServer.serverName}
+                                onChange={handleServerInputChange}
+                                className="admin-form-input"
+                                placeholder="Production Server"
+                                required
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor="new-serverUrl">Server URL *</label>
+                              <input
+                                type="url"
+                                id="new-serverUrl"
+                                name="serverUrl"
+                                value={newServer.serverUrl}
+                                onChange={handleServerInputChange}
+                                className="admin-form-input"
+                                placeholder="https://server.example.com:4000"
+                                required
+                              />
+                            </div>
+                          </div>
+                          
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label htmlFor="new-serverIp">Server IP</label>
+                              <input
+                                type="text"
+                                id="new-serverIp"
+                                name="serverIp"
+                                value={newServer.serverIp}
+                                onChange={handleServerInputChange}
+                                className="admin-form-input"
+                                placeholder="192.168.1.100"
+                              />
+                            </div>
+                            <div className="form-group">
+                              <label htmlFor="new-serverDetail">Server Detail</label>
+                              <input
+                                type="text"
+                                id="new-serverDetail"
+                                name="serverDetail"
+                                value={newServer.serverDetail}
+                                onChange={handleServerInputChange}
+                                className="admin-form-input"
+                                placeholder="hostname;ip;startTime"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-row">
+                            <div className="form-group">
+                              <label htmlFor="new-emailCount">Email Count</label>
+                              <input
+                                type="number"
+                                id="new-emailCount"
+                                name="emailCount"
+                                value={newServer.emailCount}
+                                onChange={handleServerInputChange}
+                                className="admin-form-input"
+                                min="0"
+                              />
+                            </div>
+                          </div>
+
+                          <div className="form-group">
+                            <label>
+                              <input
+                                type="checkbox"
+                                name="isActive"
+                                checked={newServer.isActive}
+                                onChange={handleServerInputChange}
+                              />
+                              Server is Active
+                            </label>
+                          </div>
+
+                          <button
+                            type="button"
+                            className="admin-btn small success"
+                            onClick={addServerToUser}
+                          >
+                            Add Server
+                          </button>
+                        </div>
+                      )}
+
+                      {/* Existing Servers List */}
+                      {(editingUser.servers || []).length > 0 && (
+                        <div className="servers-list">
+                          <h5>Current Servers ({(editingUser.servers || []).length})</h5>
+                          {(editingUser.servers || []).map(server => (
+                            <div key={server.serverId} className="server-item">
+                              <div className="server-info">
+                                <div className="server-header">
+                                  <strong>{server.serverName}</strong>
+                                  <span className={`status-badge ${server.isActive ? 'active' : 'inactive'}`}>
+                                    {server.isActive ? 'Active' : 'Inactive'}
+                                  </span>
+                                  <button
+                                    type="button"
+                                    className="admin-btn small danger"
+                                    onClick={() => removeServerFromUser(server.serverId)}
+                                  >
+                                    Remove
+                                  </button>
+                                </div>
+                                <div className="server-details">
+                                  <div><strong>ID:</strong> {server.serverId}</div>
+                                  <div><strong>URL:</strong> {server.serverUrl}</div>
+                                  <div><strong>IP:</strong> {server.serverIp || 'N/A'}</div>
+                                  <div><strong>Email Count:</strong> {server.emailCount || 0}</div>
+                                  <div><strong>Last Seen:</strong> {new Date(server.lastSeen).toLocaleString()}</div>
+                                  {server.serverDetail && (
+                                    <div><strong>Details:</strong> {server.serverDetail}</div>
+                                  )}
+                                </div>
+                              </div>
+                            </div>
+                          ))}
+                        </div>
+                      )}
                     </div>
 
                     <div className="admin-actions">
