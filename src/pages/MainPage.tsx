@@ -57,13 +57,13 @@ const MainPage: React.FC = () => {
     return Math.round((job.sentEmails / job.totalEmails) * 100);
   };
 
-  // Helper function to check if a server is busy
-  const isServerBusy = (serverId: string): boolean => {
-    return activeJobs.some(job => 
-      job.serverId === serverId && 
-      (job.status === 'processing' || job.status === 'pending')
-    );
-  };
+  // // Helper function to check if a server is busy
+  // const isServerBusy = (serverId: string): boolean => {
+  //   return activeJobs.some(job => 
+  //     job.serverId === serverId && 
+  //     (job.status === 'processing' || job.status === 'pending')
+  //   );
+  // };
 
   // Helper function to get server status text
   const getServerStatusText = (serverId: string): string => {
