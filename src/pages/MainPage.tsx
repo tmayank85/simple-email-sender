@@ -51,6 +51,32 @@ const MainPage: React.FC = () => {
     }
   };
 
+  // Helper function to calculate job progress
+  const calculateProgress = (job: any): number => {
+    if (job.totalEmails === 0) return 0;
+    return Math.round((job.sentEmails / job.totalEmails) * 100);
+  };
+
+  // Helper function to check if a server is busy
+  const isServerBusy = (serverId: string): boolean => {
+    return activeJobs.some(job => 
+      job.serverId === serverId && 
+      (job.status === 'processing' || job.status === 'pending')
+    );
+  };
+
+  // Helper function to get server status text
+  const getServerStatusText = (serverId: string): string => {
+    const busyJobs = activeJobs.filter(job => 
+      job.serverId === serverId && 
+      (job.status === 'processing' || job.status === 'pending')
+    ).length;
+    
+    if (busyJobs === 0) return '✅ Free';
+    if (busyJobs === 1) return '🔄 1 job';
+    return `🔄 ${busyJobs} jobs`;
+  };
+
   // Helper function to update local email count
   const updateLocalEmailCount = (additionalCount: number) => {
     if (headerServerInfo && headerServerInfo !== 'Unavailable|No IP|Unknown|0|0') {
@@ -243,8 +269,11 @@ const MainPage: React.FC = () => {
           // Show browser alert for immediate notification
           alert(`Background Email Job Created!\n\nJob ID: ${result.data?.jobId}\nTotal Emails: ${validRecipients.length}\nEstimated Completion: ${result.data?.estimatedCompletionTime || 'Unknown'}\n\nYou can monitor progress in the Job Monitor.`);
           
-          // Refresh active jobs
-          loadActiveJobs();
+          // Refresh active jobs with a slight delay and auto-open job monitor
+          setTimeout(() => {
+            loadActiveJobs();
+            setShowJobMonitor(true); // Auto-open job monitor to show the new job
+          }, 500);
         } else {
           setLastResult(`❌ ${result.message}`);
         }
@@ -355,12 +384,14 @@ const MainPage: React.FC = () => {
                     title="Select server or leave auto for load balancing"
                   >
                     <option value="">🎯 Auto-Select Server</option>
-                    {userServers.map((server) => (
-                      <option key={server.serverId} value={server.serverId}>
-                        {server.isActive ? '🟢' : '🔴'} {server.serverName} 
-                        {server.isBusy ? ' (Busy)' : ''} ({server.emailCount || 0})
-                      </option>
-                    ))}
+                    {userServers.map((server) => {
+                      const statusText = getServerStatusText(server.serverId);
+                      return (
+                        <option key={server.serverId} value={server.serverId}>
+                          {server.isActive ? '🟢' : '🔴'} {server.serverName} - {statusText} ({server.emailCount || 0})
+                        </option>
+                      );
+                    })}
                   </select>
                 </div>
               )}
@@ -412,17 +443,15 @@ const MainPage: React.FC = () => {
             </div>
           </div>
           <div className="user-section">
-            {/* Compact Job Monitor Toggle */}
-            {activeJobs.length > 0 && (
-              <button
-                type="button"
-                onClick={() => setShowJobMonitor(!showJobMonitor)}
-                className="compact-job-monitor"
-                title={`${activeJobs.length} active background jobs`}
-              >
-                🔄 Jobs ({activeJobs.length})
-              </button>
-            )}
+            {/* Compact Job Monitor Toggle - Always Visible */}
+            <button
+              type="button"
+              onClick={() => setShowJobMonitor(!showJobMonitor)}
+              className="compact-job-monitor"
+              title={activeJobs.length > 0 ? `${activeJobs.length} active background jobs` : 'No active background jobs'}
+            >
+              🔄 Jobs ({activeJobs.length})
+            </button>
 
             {userInfo && (
               <div className="user-info">
@@ -443,26 +472,87 @@ const MainPage: React.FC = () => {
       </header>
 
       {/* Compact Job Monitor Panel */}
-      {showJobMonitor && activeJobs.length > 0 && (
+      {showJobMonitor && (
         <div className="compact-job-monitor-panel">
           <div className="job-monitor-content">
-            <h3>Active Background Jobs</h3>
-            <div className="jobs-grid">
-              {activeJobs.map((job) => (
+            <div className="job-monitor-header">
+              <h3>Background Jobs Monitor ({activeJobs.length})</h3>
+              
+              {activeJobs.length === 0 ? (
+                <div className="no-jobs-message">
+                  <div className="no-jobs-content">
+                    <span className="no-jobs-icon">📭</span>
+                    <span className="no-jobs-text">No background jobs running</span>
+                    <p className="no-jobs-hint">Start sending emails in background mode to see jobs here</p>
+                  </div>
+                </div>
+              ) : (
+                <>
+                  {/* Server Load Summary - Simplified */}
+                  {activeJobs.length > 1 && (
+                    <div className="server-load-summary">
+                      <h4>Active Jobs by Server</h4>
+                      <div className="server-load-grid">
+                        {Array.from(new Set(activeJobs.map(job => job.serverName).filter(Boolean))).map(serverName => {
+                          const serverJobs = activeJobs.filter(job => job.serverName === serverName);
+                          const processingCount = serverJobs.filter(job => job.status === 'processing').length;
+                          const pendingCount = serverJobs.filter(job => job.status === 'pending').length;
+                          const pausedCount = serverJobs.filter(job => job.status === 'paused').length;
+                          
+                          return (
+                            <div key={serverName} className="server-load-item">
+                              <div className="server-load-header">
+                                <span className="server-load-name">🖥️ {serverName}</span>
+                                <span className="server-load-count">{serverJobs.length} jobs</span>
+                              </div>
+                              <div className="server-load-details">
+                                {processingCount > 0 && <span className="load-stat processing">⚡ {processingCount}</span>}
+                                {pendingCount > 0 && <span className="load-stat pending">⏳ {pendingCount}</span>}
+                                {pausedCount > 0 && <span className="load-stat paused">⏸️ {pausedCount}</span>}
+                              </div>
+                            </div>
+                          );
+                        })}
+                      </div>
+                    </div>
+                  )}
+                </>
+              )}
+            </div>
+            
+            {activeJobs.length > 0 && (
+              <div className="jobs-grid">
+                {activeJobs.map((job) => (
                 <div key={job.jobId} className="compact-job-item">
                   <div className="job-info">
                     <span className="job-id">#{job.jobId.slice(-6)}</span>
                     <span className={`job-status ${job.status}`}>{job.status}</span>
                   </div>
+                  
+                  {/* Server Information */}
+                  {job.serverId && job.serverName && (
+                    <div className="job-server-info">
+                      <div className="server-indicator">
+                        <span className="server-icon">🖥️</span>
+                        <span className="server-name" title={`Server URL: ${job.serverUrl}`}>
+                          {job.serverName}
+                        </span>
+                      </div>
+                      <div className="server-details">
+                        <span className="server-id">ID: {job.serverId.slice(-6)}</span>
+                      </div>
+                    </div>
+                  )}
+
                   <div className="job-progress-compact">
                     <div className="progress-bar-mini">
                       <div 
                         className="progress-fill-mini"
-                        style={{ width: `${job.progress || 0}%` }}
+                        style={{ width: `${calculateProgress(job)}%` }}
                       ></div>
                     </div>
                     <span className="progress-text-mini">
-                      {job.sentEmails}/{job.totalEmails} ({Math.round(job.progress || 0)}%)
+                      {job.sentEmails}/{job.totalEmails} ({Math.round(calculateProgress(job))}%)
                     </span>
                   </div>
                   <div className="job-actions-compact">
@@ -496,6 +586,7 @@ const MainPage: React.FC = () => {
                 </div>
               ))}
             </div>
+            )}
           </div>
         </div>
       )}

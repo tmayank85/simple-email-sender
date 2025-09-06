@@ -36,20 +36,36 @@ interface BackgroundEmailData extends EmailData {
 }
 
 interface EmailJob {
+  _id: string;
   jobId: string;
+  userId: string;
+  serverId: string;
+  serverName: string;
+  serverUrl: string;
   status: 'pending' | 'processing' | 'completed' | 'failed' | 'paused';
   totalEmails: number;
   sentEmails: number;
   failedEmails: number;
   createdAt: string;
   updatedAt: string;
+  startedAt?: string;
   estimatedCompletionTime?: string;
   progress: number;
-  serverInfo: {
-    serverId: string;
-    serverName: string;
-    serverUrl: string;
-  };
+  priority: number;
+  currentEmailIndex: number;
+  retryCount: number;
+  maxRetries: number;
+  senderEmail: string;
+  senderName: string;
+  subject: string;
+  template: string;
+  recipients: string[];
+  sendResults: Array<{
+    email: string;
+    status: string;
+    timestamp: string;
+    _id: string;
+  }>;
 }
 
 interface ServerInfo {
