@@ -335,40 +335,40 @@ const AdminPage: React.FC = () => {
     }
   };
 
-  const updateServerForUser = async (serverId: string, updatedServerData: Partial<Server>) => {
-    if (!editingUser) return;
+  // const updateServerForUser = async (serverId: string, updatedServerData: Partial<Server>) => {
+  //   if (!editingUser) return;
 
-    try {
-      const token = localStorage.getItem('admin_token');
+  //   try {
+  //     const token = localStorage.getItem('admin_token');
       
-      const response = await fetch(`${BACKEND_URL}/api/admin/users/${editingUser._id}`, {
-        method: 'PUT',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json',
-        },
-        body: JSON.stringify({
-          updateServer: {
-            serverId,
-            ...updatedServerData
-          }
-        }),
-      });
+  //     const response = await fetch(`${BACKEND_URL}/api/admin/users/${editingUser._id}`, {
+  //       method: 'PUT',
+  //       headers: {
+  //         'Authorization': `Bearer ${token}`,
+  //         'Content-Type': 'application/json',
+  //       },
+  //       body: JSON.stringify({
+  //         updateServer: {
+  //           serverId,
+  //           ...updatedServerData
+  //         }
+  //       }),
+  //     });
 
-      const data = await response.json();
+  //     const data = await response.json();
 
-      if (response.ok && data.success) {
-        // Update local state with the response
-        setEditingUser(data.data);
-        alert('✅ Server updated successfully!');
-      } else {
-        alert(`❌ Failed to update server: ${data.message || 'Unknown error'}`);
-      }
-    } catch (err) {
-      console.error('Update server error:', err);
-      alert('❌ Network error occurred while updating server');
-    }
-  };
+  //     if (response.ok && data.success) {
+  //       // Update local state with the response
+  //       setEditingUser(data.data);
+  //       alert('✅ Server updated successfully!');
+  //     } else {
+  //       alert(`❌ Failed to update server: ${data.message || 'Unknown error'}`);
+  //     }
+  //   } catch (err) {
+  //     console.error('Update server error:', err);
+  //     alert('❌ Network error occurred while updating server');
+  //   }
+  // };
 
   const handleServerInputChange = (e: React.ChangeEvent<HTMLInputElement | HTMLSelectElement>) => {
     const { name, value, type } = e.target;
